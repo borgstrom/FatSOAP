@@ -111,40 +111,6 @@ class XMLObject {
 		}
 	}
 
-	public function serialize($name, $val, &$xml) {
-		if (is_array($val)) {
-			// array('this', 'is', 'a', 'test');
-			// array('this' => 'test');
-			$sub = $xml->addChild($name);
-			foreach ($val as $sub_key => $sub_val) {
-				$this->serialize($sub_key, $sub_val, &$sub);
-			}
-		} elseif (is_object($val)) {
-			$cls = get_class($val);
-			$ref = new ReflectionClass($cls);
-			$parent = $ref->getParentClass();
-			if ($parent->name == "XMLObject") {
-				if (preg_match("#^[0-9]$#", $name)) {
-					/* if the name is all numeric, ie not an explicitly associatiave
-					 * array, then we use the class name in its place. this is probably
-					 * a terrible hack, but it works...
-					 */
-					$name = $cls;
-				}
-				if ($val->namespace !== null) {
-					$sub = $xml->addChild($name, null, $val->namespace);
-				} else {
-					$sub = $xml->addChild($name);
-				}
-				$val->asXML(&$sub, false);
-			} else {
-				print "Warning: got an object I can't serialize: $cls\n";
-			}
-		} else {
-			$xml->addChild($name, $val);
-		}
-	}
-
 	/*
 	 * create_xml is the new version of the object serializtion logic
 	 * that now uses XMLWriter instead of simplexml.
@@ -169,41 +135,5 @@ class XMLObject {
 			}
 		}
 		$writer->endElement();
-	}
-
-
-	/*
-	 * asXML will return the object into an XML string via reflection
-	 * it is used recursively by passing in an existing $xml object
-	 */
-	public function asXML(&$xml = null, $return_xml = true) {
-		$cls = get_class($this);
-		if ($xml === null) {
-			if ($this->namespace !== null) {
-				$xml = new SimpleXMLElement("<$cls xmlns=\"" . $this->namespace . "\"/>");
-			} else {
-				$xml = new SimpleXMLElement("<$cls/>");
-			}
-		}
-		$ref = new ReflectionClass($cls);
-		$props = $ref->getProperties();
-		foreach ($props as $prop) {
-			$name = $prop->getName();
-			if ($name == 'namespace') { 
-				continue;
-			}
-			if (isset($this->{$name})) {
-				$val = $this->{$name};
-				$this->serialize($name, $val, &$xml);
-			}
-		}
-		if ($return_xml === true) {
-			/* we have to strip off the first line as the soap client will take
-			 * of adding the xml header: <?xml version="1.0"?>
-			 * then we also have to strip off our wrapper that lets name spaces work
-			 */
-			$lines = explode("\n", $xml->asXML());
-			return preg_replace("#^<wrapper [^>]+>(.*)</wrapper>$#i", "$1", $lines[1]);
-		}
 	}
 }
