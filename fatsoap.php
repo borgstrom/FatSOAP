@@ -62,8 +62,7 @@ class SOAP_Client {
 		curl_setopt($this->curl, CURLOPT_POSTFIELDS, $data);
 
 		$response = curl_exec($this->curl);
-
-		print $response;
+		return $response;
 	}
 
 	public function show($function, $body, $header = null) {
