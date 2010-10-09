@@ -1,3 +1,72 @@
 FatSOAP - PHP SOAP Implementation
 
-TODO: Document
+These classes are the result of working with a very strict web service
+that had a broken WSDL file describing it. I couldn't get any love from
+it using PHP5's built in SOAP classes nor from the NuSOAP classes. Each
+time I would think I was getting somewhere the end point would not
+return any valid results and each time I would get feedback from the
+vendor of the end point they would say it was the syntax of the request.
+
+Using XMLObject as a base and manually declaring objects to be used in
+the SOAP requests adds a little more overhead but gives you complete
+control over how they are generated.
+
+Initially this was written using the simplexml extension, but it too
+proved to be inflexible in how the DOM was being generated. So now it
+uses XMLWriter.
+
+Here's a quick example (from example.php):
+
+<?php
+require 'fatsoap.php';
+
+class Credentials extends XMLObject {
+	public $Username;
+	public $Password;
+
+	public function __construct($user, $pass) {
+		$this->Username = $user;
+		$this->Password = $pass;
+	}
+}
+
+class RequestQuote extends XMLObject {
+	public $symbol;
+
+	public $namespace = 'val';
+	public $own_namespace = 'quote';
+}
+
+$c = new SOAP_Client('http://somefinancialsite.com/quotes/', array(
+	'soapenv' => 'http://schemas.xmlsoap.org/soap/envelope/',
+	'val' => 'http://somefinancialsite.com/schema/val/',
+	'quote' => 'http://somefinancialsite.com/schema/quote/',
+));
+
+$creds = new Credentials("thisismyusername", "superrrrrrsecret");
+
+$req = new RequestQuote();
+$req->symbol = "AAPL";
+
+header('Content-Type: text/xml');
+echo $c->show('RequestQuote', $req, $creds);
+
+------ 8< ----------
+
+This produces:
+
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:val="http://somefinancialsite.com/schema/val/" xmlns:quote="http://somefinancialsite.com/schema/quote/">
+ <soapenv:Header>
+  <Credentials>
+   <Username>thisismyusername</Username>
+   <Password>superrrrrrsecret</Password>
+  </Credentials>
+ </soapenv:Header>
+ <soapenv:Body>
+
+  <quote:RequestQuote>
+   <val:symbol>AAPL</val:symbol>
+  </quote:RequestQuote>
+ </soapenv:Body>
+</soapenv:Envelope>
