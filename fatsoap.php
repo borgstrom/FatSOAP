@@ -15,9 +15,10 @@ class SOAP_Client {
 	 * create_xml - builds the XML object for the request
 	 *
 	 * params:
+	 * $body - an XMLObject that will be used as the body
 	 * $header - if null no headers are added, else should be an object that extends XMLObject
 	 */
-	public function create_xml($header = null) {
+	public function create_xml($body, $header = null) {
 		$soapns = $this->namespace_by_url('http://schemas.xmlsoap.org/soap/envelope/');
 		if (!isset($soapns)) {
 			throw new Exception("You need a namespace for the SOAP envelope");
@@ -35,9 +36,16 @@ class SOAP_Client {
 
 		if ($header !== null) {
 			$this->writer->startElement("$soapns:Header");
-			$header->create_xml(&$this->writer);
+			$header->set_client(&$this);
+			$header->create_xml();
 			$this->writer->endElement(); // Header
 		}
+
+		$this->writer->startElement("$soapns:Body");
+		$body->set_client(&$this);
+		$body->create_xml();
+		$this->writer->endElement(); // Body
+
 		$this->writer->endElement(); // Envelope
 	}
 
@@ -49,13 +57,6 @@ class SOAP_Client {
 		}
 	}
 
-	public function namespace_by_key($target) {
-		foreach ($this->namespaces as $key => $url) {
-			if ($key == $target) {
-				return $url;
-			}
-		}
-	}
 }
 
 /*
@@ -67,12 +68,43 @@ class XMLObject {
 	public $namespace = null;
 
 	/*
+	 * soap_client & writer will hold references to the client & writer
+	 */
+	private $soap_client = null;
+	private $writer = null;
+
+	/*
+	 * set_client associates the client & writer with this object
+	 */
+	public function set_client(&$client) {
+		$client_cls = get_class($client);
+		if ($client_cls == 'SOAP_Client') {
+			$this->soap_client =& $client;
+			$this->writer =& $client->writer;
+			return true;
+		}
+		return false;
+	}
+
+	/*
 	 * with_namespace is a utility function to prefix the namespace onto
 	 * a value, if it's not null
 	 */
 	private function with_namespace($name) {
 		if ($this->namespace !== null) {
-			return $this->namespace . ":" . $name;
+			/*
+			 * allow name spaces to be specified by URL too
+			 */
+			$ns = $this->soap_client->namespace_by_url($this->namespace);
+			if (isset($ns)) {
+				$this->namespace = $ns;
+			}
+
+			if (array_key_exists($this->namespace, $this->soap_client->namespaces)) {
+				$name = $this->namespace . ":" . $name;
+			} else {
+				throw new Exception("You have specified an invalid name space (" . $this->namespace . ") for the " . get_class($this) . " class");
+			}
 		}
 		return $name;
 	}
@@ -81,15 +113,14 @@ class XMLObject {
 	 * serialize_writer is the new version of serialize that uses the
 	 * XMLWriter class
 	 */
-	private function serialize_writer($name, $val, &$writer) {
+	private function serialize_writer($name, $val) {
 		if (is_array($val)) {
-			$writer->startElement($this->with_namespace($name));
+			$this->writer->startElement($this->with_namespace($name));
 			foreach ($val as $sub_key => $sub_val) {
-				$this->serialize($sub_key, $sub_val, &$writer);
+				$this->serialize_writer($sub_key, $sub_val);
 			}
-			$writer->endElement();
+			$this->writer->endElement();
 		} elseif (is_object($val)) {
-			$writer->startElement($this->with_namespace($name));
 			$cls = get_class($val);
 			$ref = new ReflectionClass($cls);
 			$parent = $ref->getParentClass();
@@ -101,13 +132,15 @@ class XMLObject {
 					 */
 					$name = $cls;
 				}
-				$this->create_xml(&$writer);
+				$val->set_client(&$this->soap_client);
+				$this->writer->startElement($this->with_namespace($name));
+				$val->create_xml();
+				$this->writer->endElement();
 			} else {
-				print "Warning: got an object I can't serialize: $cls\n";
+				throw new Exception("serialize_writer got an object I can't serialize: $cls");
 			}
-			$writer->endElement();
 		} else {
-			$writer->writeElement($this->with_namespace($name), $val);
+			$this->writer->writeElement($this->with_namespace($name), $val);
 		}
 	}
 
@@ -117,10 +150,10 @@ class XMLObject {
 	 * it's job is to inspect itself through reflection and then
 	 * serialize any properties recursively
 	 */
-	public function create_xml(&$writer) {
+	public function create_xml() {
 		$cls = get_class($this);
 
-		$writer->startElement($this->with_namespace($cls));
+		$this->writer->startElement($this->with_namespace($cls));
 
 		$ref = new ReflectionClass($cls);
 		$props = $ref->getProperties();
@@ -131,9 +164,9 @@ class XMLObject {
 			}
 			if (isset($this->{$name})) {
 				$val = $this->{$name};
-				$this->serialize_writer($name, $val, &$writer);
+				$this->serialize_writer($name, $val);
 			}
 		}
-		$writer->endElement();
+		$this->writer->endElement();
 	}
 }
