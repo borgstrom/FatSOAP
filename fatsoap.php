@@ -65,6 +65,13 @@ class SOAP_Client {
 		return $response;
 	}
 
+	/*
+	 * show displays the XML that would be built for $function
+	 *
+	 * params:
+	 * $body - an XMLObject that will be used as the body
+	 * $header - if null no headers are added, else should be an object that extends XMLObject
+	 */
 	public function show($function, $body, $header = null) {
 		$this->create_xml($body, $header);
 		return $this->writer->outputMemory();
@@ -214,6 +221,13 @@ class XMLObject {
 				throw new Exception("serialize_writer got an object I can't serialize: $cls");
 			}
 		} else {
+			if (is_bool($val)) {
+				if ($val === true) {
+					$val = "true";
+				} else {
+					$val = "false";
+				}
+			}
 			$this->writer->writeElement($this->with_namespace($name), $val);
 		}
 	}
@@ -222,7 +236,7 @@ class XMLObject {
 	 * create_xml is the new version of the object serializtion logic
 	 * that now uses XMLWriter instead of simplexml.
 	 * it's job is to inspect itself through reflection and then
-	 * serialize any properties recursively
+	 * serialize any properties recursively using serialize_writer
 	 */
 	public function create_xml() {
 		$cls = get_class($this);
