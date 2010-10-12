@@ -260,4 +260,32 @@ class XMLObject {
 		}
 		$this->writer->endElement();
 	}
+
+	/*
+	 * build_from_request fills in an object from the request (GET/POST)
+	 * parameters
+	 *
+	 * as an example if you called build_from_request('obj_') and the
+	 * object which inherited from XMLObject had properties: name & val
+	 * then if the GET request had parameters obj_name=test&obj_val=1
+	 * $this->name would equal 'test' and $this->val would equal 1 
+	 */
+	public function build_from_request($prefix, $from = null) {
+		if ($from === null) {
+			$from = $_GET;
+		}
+		if (!is_array($from)) {
+			return false;
+		}
+
+		$cls = get_class($this);
+		$ref = new ReflectionClass($cls);
+		$props = $ref->getProperties();
+		foreach ($props as $prop) {
+			$name = $prop->getName();
+			if (array_key_exists($prefix . $name, $from)) {
+				$this->{$name} = $from[$prefix . $name];
+			}
+		}
+	}
 }
